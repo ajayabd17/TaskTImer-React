@@ -13,7 +13,7 @@ Description: CI/CD Pipeline for Timer App with Blue-Green Deployment
 ```
 Definition: Pipeline script from SCM
 SCM: Git
-Repository URL: https://github.com/tharunK03/TaskTImer-React.git
+Repository URL: https://github.com/ajayabd17/TaskTImer-React.git
 Branch: */main
 Script Path: Jenkinsfile
 Credentials: github-creds (if needed)

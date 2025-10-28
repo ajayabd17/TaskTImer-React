@@ -135,7 +135,7 @@ ID: kubeconfig
 ```
 Definition: Pipeline script from SCM
 SCM: Git
-Repository: https://github.com/tharunK03/TaskTImer-React.git
+Repository: https://github.com/ajayabd17/TaskTImer-React.git
 Branch: */main
 Script Path: Jenkinsfile
 ```

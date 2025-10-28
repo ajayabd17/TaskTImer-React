@@ -31,7 +31,7 @@ Create these credentials in Jenkins:
    - Enter the name `timer-app-deployment`, select **Pipeline**, click **OK**.
 2. **Configure source control**
    - Under **Pipeline** set **Definition** to `Pipeline script from SCM`.
-   - Choose **Git**, set the repository URL to `https://github.com/tharunK03/TaskTImer-React.git`.
+   - Choose **Git**, set the repository URL to `https://github.com/ajayabd17/TaskTImer-React.git`.
    - Use the default credentials (none required for public repo), set **Branch Specifier** to `*/main`, and **Script Path** to `Jenkinsfile`.
 3. **Add build triggers**
    - Check **GitHub hook trigger for GITScm polling** to support webhooks.

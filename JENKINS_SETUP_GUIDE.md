@@ -35,7 +35,7 @@
    ```
    Kind: Username with password
    Scope: Global
-   Username: tharunk03
+   Username: ajayabd17
    Password: [your-dockerhub-password]
    ID: docker-registry-credentials
    Description: Docker Hub credentials
@@ -47,7 +47,7 @@
 1. **New Item** → **Pipeline** → Name: `timer-app-deployment`
 2. **Pipeline** → **Definition**: `Pipeline script from SCM`
 3. **SCM**: Git
-4. **Repository URL**: `https://github.com/tharunK03/TaskTImer-React.git`
+4. **Repository URL**: `https://github.com/ajayabd17/TaskTImer-React.git`
 5. **Branch**: `*/main`
 6. **Script Path**: `Jenkinsfile`
 
@@ -77,7 +77,7 @@ kubectl --kubeconfig=jenkins-kubeconfig.yaml patch service timer-app-service -n 
 
 ### Successful Build Console Output:
 ```
-Started by user tharun
+Started by user ajayabd17
 [Pipeline] Start of Pipeline
 [Pipeline] node
 Running on Jenkins in /var/jenkins_home/workspace/timer-app-deployment
@@ -86,7 +86,7 @@ Running on Jenkins in /var/jenkins_home/workspace/timer-app-deployment
 [Pipeline] { (Checkout)
 [Pipeline] checkout
 Cloning the remote Git repository
-Cloning repository https://github.com/tharunK03/TaskTImer-React.git
+Cloning repository https://github.com/ajayabd17/TaskTImer-React.git
 [Pipeline] script
 [Pipeline] {
 [Pipeline] sh
