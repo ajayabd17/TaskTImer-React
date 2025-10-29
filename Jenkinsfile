@@ -1,24 +1,23 @@
 pipeline {
     agent any
-    post {
-        success {
-            echo "✅ Blue-Green deployment successful! New version running on ${env.TARGET_COLOR} environment"
-        }
-        failure {
-            script {
-                echo '❌ Deployment failed! Rolling back...'
-                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
-                    bat """
-                        set KUBECONFIG=%KUBECONFIG_FILE% && kubectl patch service timer-app-service -n ${KUBE_NAMESPACE} --type=merge -p "{\\"spec\\":{\\"selector\\":{\\"app\\":\\"timer-app\\",\\"track\\":\\"${env.ACTIVE_COLOR}\\"}}}}" && \
-                        set KUBECONFIG=%KUBECONFIG_FILE% && kubectl rollout undo deployment/timer-app-${env.TARGET_COLOR} -n ${KUBE_NAMESPACE}
-                    """
-                }
+
+    environment {
+        DOCKER_IMAGE = 'timer-app'
+        KUBE_NAMESPACE = 'timer-app'
+        BUILD_NUMBER = "${env.BUILD_NUMBER}"
+        TARGET_COLOR = 'green'
+        ACTIVE_COLOR = 'blue'
+    }
+
+    stages {
+        stage('Install Dependencies') {
+            steps {
+                bat 'npm install'
             }
         }
-        always {
-            cleanWs()
-        }
-    }
+
+        stage('Build') {
+            steps {
                 bat 'npm run build'
             }
         }
@@ -39,22 +38,20 @@ pipeline {
                 script {
                     try {
                         withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
-                            def activeColor = bat(
-                                script: "set KUBECONFIG=%KUBECONFIG_FILE% && kubectl get service timer-app-service -n ${KUBE_NAMESPACE} -o jsonpath='{.spec.selector.track}'",
-                                returnStdout: true
-                            ).trim()
-                        
-                        if (activeColor == 'blue') {
-                            env.TARGET_COLOR = 'green'
-                            env.ACTIVE_COLOR = 'blue'
-                        } else {
-                            env.TARGET_COLOR = 'blue'
-                            env.ACTIVE_COLOR = 'green'
+                            def activeColor = bat(script: "set KUBECONFIG=%KUBECONFIG_FILE% && kubectl get service timer-app-service -n ${KUBE_NAMESPACE} -o jsonpath='{.spec.selector.track}'", returnStdout: true).trim()
+
+                            if (activeColor == 'blue') {
+                                env.TARGET_COLOR = 'green'
+                                env.ACTIVE_COLOR = 'blue'
+                            } else {
+                                env.TARGET_COLOR = 'blue'
+                                env.ACTIVE_COLOR = 'green'
+                            }
+
+                            echo "Active Color: ${env.ACTIVE_COLOR}, Target Color: ${env.TARGET_COLOR}"
                         }
-                        
-                        echo "Active Color: ${env.ACTIVE_COLOR}, Target Color: ${env.TARGET_COLOR}"
                     } catch (Exception e) {
-                        echo "No active deployment found, defaulting to blue->green"
+                        echo "No active deployment found, defaulting blue->green"
                     }
                 }
             }
@@ -135,14 +132,17 @@ pipeline {
         failure {
             script {
                 echo '❌ Deployment failed! Rolling back...'
-                bat """
-                    kubectl patch service timer-app-service -n ${KUBE_NAMESPACE} --type=merge -p "{\\"spec\\":{\\"selector\\":{\\"app\\":\\"timer-app\\",\\"track\\":\\"${env.ACTIVE_COLOR}\\"}}}}"
-                    kubectl rollout undo deployment/timer-app-${env.TARGET_COLOR} -n ${KUBE_NAMESPACE}
-                """
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                    bat """
+                        set KUBECONFIG=%KUBECONFIG_FILE% && kubectl patch service timer-app-service -n ${KUBE_NAMESPACE} --type=merge -p "{\\"spec\\":{\\"selector\\":{\\"app\\":\\"timer-app\\",\\"track\\":\\"${env.ACTIVE_COLOR}\\"}}}}" && \
+                        set KUBECONFIG=%KUBECONFIG_FILE% && kubectl rollout undo deployment/timer-app-${env.TARGET_COLOR} -n ${KUBE_NAMESPACE}
+                    """
+                }
             }
-                     withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
-                         bat """
-                             set KUBECONFIG=%KUBECONFIG_FILE% && kubectl patch service timer-app-service -n ${KUBE_NAMESPACE} --type=merge -p "{\\"spec\\":{\\"selector\\":{\\"app\\":\\"timer-app\\",\\"track\\":\\"${env.ACTIVE_COLOR}\\"}}}}" && \
-                             set KUBECONFIG=%KUBECONFIG_FILE% && kubectl rollout undo deployment/timer-app-${env.TARGET_COLOR} -n ${KUBE_NAMESPACE}
-                         """
+        }
+        always {
+            cleanWs()
+        }
+    }
+}
                      }
