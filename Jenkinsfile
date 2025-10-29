@@ -1,23 +1,24 @@
 pipeline {
     agent any
-    
-    environment {
-        DOCKER_IMAGE = 'timer-app'
-        KUBE_NAMESPACE = 'timer-app'
-        BUILD_NUMBER = "${env.BUILD_NUMBER}"
-        TARGET_COLOR = 'green'
-        ACTIVE_COLOR = 'blue'
-    }
-
-    stages {
-        stage('Install Dependencies') {
-            steps {
-                bat 'npm install'
+    post {
+        success {
+            echo "✅ Blue-Green deployment successful! New version running on ${env.TARGET_COLOR} environment"
+        }
+        failure {
+            script {
+                echo '❌ Deployment failed! Rolling back...'
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                    bat """
+                        set KUBECONFIG=%KUBECONFIG_FILE% && kubectl patch service timer-app-service -n ${KUBE_NAMESPACE} --type=merge -p "{\\"spec\\":{\\"selector\\":{\\"app\\":\\"timer-app\\",\\"track\\":\\"${env.ACTIVE_COLOR}\\"}}}}" && \
+                        set KUBECONFIG=%KUBECONFIG_FILE% && kubectl rollout undo deployment/timer-app-${env.TARGET_COLOR} -n ${KUBE_NAMESPACE}
+                    """
+                }
             }
         }
-
-        stage('Build') {
-            steps {
+        always {
+            cleanWs()
+        }
+    }
                 bat 'npm run build'
             }
         }
@@ -37,10 +38,11 @@ pipeline {
             steps {
                 script {
                     try {
-                        def activeColor = bat(
-                            script: "kubectl get service timer-app-service -n ${KUBE_NAMESPACE} -o jsonpath='{.spec.selector.track}'",
-                            returnStdout: true
-                        ).trim()
+                        withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                            def activeColor = bat(
+                                script: "set KUBECONFIG=%KUBECONFIG_FILE% && kubectl get service timer-app-service -n ${KUBE_NAMESPACE} -o jsonpath='{.spec.selector.track}'",
+                                returnStdout: true
+                            ).trim()
                         
                         if (activeColor == 'blue') {
                             env.TARGET_COLOR = 'green'
@@ -61,10 +63,13 @@ pipeline {
         stage('Deploy to Target Environment') {
             steps {
                 script {
-                    bat """
-                        kubectl set image deployment/timer-app-${env.TARGET_COLOR} timer-app=${DOCKER_IMAGE}:${BUILD_NUMBER} -n ${KUBE_NAMESPACE}
-                        kubectl rollout status deployment/timer-app-${env.TARGET_COLOR} -n ${KUBE_NAMESPACE} --timeout=300s
-                    """
+                    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                        bat """
+                            set KUBECONFIG=%KUBECONFIG_FILE% && \
+                            kubectl set image deployment/timer-app-${env.TARGET_COLOR} timer-app=${DOCKER_IMAGE}:${BUILD_NUMBER} -n ${KUBE_NAMESPACE} && \
+                            kubectl rollout status deployment/timer-app-${env.TARGET_COLOR} -n ${KUBE_NAMESPACE} --timeout=300s
+                        """
+                    }
                 }
             }
         }
@@ -72,10 +77,12 @@ pipeline {
         stage('Verify Deployment') {
             steps {
                 script {
-                    bat """
-                        kubectl get pods -n ${KUBE_NAMESPACE} -l app=timer-app,track=${env.TARGET_COLOR}
-                        timeout /t 30 /nobreak
-                    """
+                    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                        bat """
+                            set KUBECONFIG=%KUBECONFIG_FILE% && kubectl get pods -n ${KUBE_NAMESPACE} -l app=timer-app,track=${env.TARGET_COLOR}
+                        """
+                    }
+                    bat 'timeout /t 30 /nobreak'
                 }
             }
         }
@@ -83,10 +90,12 @@ pipeline {
         stage('Switch Traffic') {
             steps {
                 script {
-                    bat """
-                        kubectl patch service timer-app-service -n ${KUBE_NAMESPACE} --type=merge -p "{\\"spec\\":{\\"selector\\":{\\"app\\":\\"timer-app\\",\\"track\\":\\"${env.TARGET_COLOR}\\"}}}}"
-                        timeout /t 10 /nobreak
-                    """
+                    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                        bat """
+                            set KUBECONFIG=%KUBECONFIG_FILE% && kubectl patch service timer-app-service -n ${KUBE_NAMESPACE} --type=merge -p "{\\"spec\\":{\\"selector\\":{\\"app\\":\\"timer-app\\",\\"track\\":\\"${env.TARGET_COLOR}\\"}}}}"
+                        """
+                    }
+                    bat 'timeout /t 10 /nobreak'
                 }
             }
         }
@@ -94,11 +103,13 @@ pipeline {
         stage('Health Check') {
             steps {
                 script {
-                    bat """
-                        kubectl get pods -n ${KUBE_NAMESPACE} -l app=timer-app,track=${env.TARGET_COLOR} -o jsonpath='{.items[0].metadata.name}' > pod_name.txt
-                        set /p POD_NAME=<pod_name.txt
-                        kubectl exec -n ${KUBE_NAMESPACE} %POD_NAME% -- curl -f http://localhost:80 --connect-timeout 10
-                    """
+                    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                        bat """
+                            set KUBECONFIG=%KUBECONFIG_FILE% && kubectl get pods -n ${KUBE_NAMESPACE} -l app=timer-app,track=${env.TARGET_COLOR} -o jsonpath='{.items[0].metadata.name}' > pod_name.txt
+                            set /p POD_NAME=<pod_name.txt
+                            set KUBECONFIG=%KUBECONFIG_FILE% && kubectl exec -n ${KUBE_NAMESPACE} %POD_NAME% -- curl -f http://localhost:80 --connect-timeout 10
+                        """
+                    }
                 }
             }
         }
@@ -106,10 +117,12 @@ pipeline {
         stage('Cleanup Old Deployment') {
             steps {
                 script {
-                    bat """
-                        kubectl scale deployment timer-app-${env.ACTIVE_COLOR} -n ${KUBE_NAMESPACE} --replicas=0
-                        docker image prune -f
-                    """
+                    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                        bat """
+                            set KUBECONFIG=%KUBECONFIG_FILE% && kubectl scale deployment timer-app-${env.ACTIVE_COLOR} -n ${KUBE_NAMESPACE} --replicas=0
+                        """
+                    }
+                    bat 'docker image prune -f'
                 }
             }
         }
@@ -127,9 +140,9 @@ pipeline {
                     kubectl rollout undo deployment/timer-app-${env.TARGET_COLOR} -n ${KUBE_NAMESPACE}
                 """
             }
-        }
-        always {
-            cleanWs()
-        }
-    }
-}
+                     withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                         bat """
+                             set KUBECONFIG=%KUBECONFIG_FILE% && kubectl patch service timer-app-service -n ${KUBE_NAMESPACE} --type=merge -p "{\\"spec\\":{\\"selector\\":{\\"app\\":\\"timer-app\\",\\"track\\":\\"${env.ACTIVE_COLOR}\\"}}}}" && \
+                             set KUBECONFIG=%KUBECONFIG_FILE% && kubectl rollout undo deployment/timer-app-${env.TARGET_COLOR} -n ${KUBE_NAMESPACE}
+                         """
+                     }
