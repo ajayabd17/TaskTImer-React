@@ -2,12 +2,6 @@ pipeline {
     agent any
 
     stages {
-        stage('Checkout') {
-            steps {
-                git 'https://github.com/ajayabd17/TaskTImer-React.git'
-            }
-        }
-
         stage('Install Dependencies') {
             steps {
                 bat 'npm install'
