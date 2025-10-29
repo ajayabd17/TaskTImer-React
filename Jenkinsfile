@@ -22,13 +22,54 @@ pipeline {
             }
         }
 
+        stage('Preflight / Kubeconfig check') {
+            steps {
+                script {
+                    // Verify Jenkins has the kubeconfig credential and that kubectl can reach the cluster
+                    try {
+                        withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                            if (isUnix()) {
+                                sh "echo 'Using kubeconfig:' ${KUBECONFIG_FILE} || true"
+                                sh "ls -l ${KUBECONFIG_FILE} || true"
+                                sh "KUBECONFIG=${KUBECONFIG_FILE} kubectl version --client || true"
+                                sh "KUBECONFIG=${KUBECONFIG_FILE} kubectl cluster-info || true"
+                            } else {
+                                bat "echo Using kubeconfig: %KUBECONFIG_FILE%"
+                                bat "type %KUBECONFIG_FILE%"
+                                bat "set KUBECONFIG=%KUBECONFIG_FILE% && kubectl version --client || echo kubectl-not-found"
+                                bat "set KUBECONFIG=%KUBECONFIG_FILE% && kubectl cluster-info || echo cluster-info-failed"
+                            }
+                        }
+                    } catch (e) {
+                        echo "WARNING: kubeconfig credential 'kubeconfig' not available or invalid. Please add it in Jenkins credentials (Secret file, id=kubeconfig)."
+                        // fail early so pipeline doesn't continue and produce confusing kubectl HTML errors
+                        error("Missing or invalid kubeconfig credential: ${e}")
+                    }
+                }
+            }
+        }
+
         stage('Docker Build and Tag') {
             steps {
                 script {
-                    bat """
-                        docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
-                        docker build -t ${DOCKER_IMAGE}:latest .
-                    """
+                    if (isUnix()) {
+                        sh '''
+                            docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
+                            docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${DOCKER_IMAGE}:latest
+                            if command -v minikube >/dev/null 2>&1; then
+                              echo "minikube detected — loading image into minikube"
+                              minikube image load ${DOCKER_IMAGE}:${BUILD_NUMBER} || true
+                            fi
+                        '''
+                    } else {
+                        bat """
+                            docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
+                            docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${DOCKER_IMAGE}:latest
+                        """
+                        // try loading into minikube on Windows if available
+                        bat 'where minikube || echo minikube-not-found'
+                        bat "minikube image load ${DOCKER_IMAGE}:${BUILD_NUMBER} || echo minikube-load-failed"
+                    }
                 }
             }
         }
@@ -145,3 +186,4 @@ pipeline {
         }
     }
 }
+                     }
